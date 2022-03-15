@@ -6,6 +6,8 @@
 #include <chrono>
 #include <memory>
 #include <exception>
+#include <thread>
+#include <execution>
 
 using namespace std;
 using chrono::seconds;
@@ -19,6 +21,12 @@ template<typename T>
 typename vector<T>::const_iterator Find(const vector<T>& data, const T& x)
 {
     return find(data.cbegin(), data.cend(), x);
+}
+
+template<typename T>
+typename vector<T>::const_iterator FindWithExecutionPolicy(const vector<T>& data, const T& x)
+{
+    return find(execution::par, data.cbegin(), data.cend(), x);
 }
 
 template<typename T>
@@ -65,7 +73,7 @@ typename vector<T>::const_iterator MTAsyncFind(const vector<T>& data, const T& x
         futures.push_back(async(launch::async, findTask, start, end, x));
     }
     auto result = data.cend();
-    for (auto& f : futures)
+    for (future<Iterator>& f : futures)
     {
         auto it = f.get();
         if (it != data.cend())
@@ -79,8 +87,41 @@ typename vector<T>::const_iterator MTAsyncFind(const vector<T>& data, const T& x
 template<typename T>
 typename vector<T>::const_iterator MTAsyncFindWithPackagedTask(const vector<T>& data, const T& x)
 {
-    // to try...
-    return data.cend();
+    using Iterator = typename vector<T>::const_iterator;
+    auto findTask = [&data](
+        Iterator from,
+        Iterator to,
+        const T& x) -> Iterator
+    {
+        auto it = find(from, to, x);
+        return (*it) == x ? it : data.cend();
+    };
+    const size_t step = data.size() / NumThreads;
+    vector<future<Iterator>> futures;
+    vector<thread> threads;
+    for (size_t i = 0; i < NumThreads; i++)
+    {
+        packaged_task<Iterator(Iterator, Iterator, const T&) > packagedTask(findTask);
+        auto start = data.cbegin() + i * step;
+        const bool isLast = (i == NumThreads - 1);
+        auto end = isLast ? data.cend() : start + step;
+        futures.push_back(packagedTask.get_future());
+        threads.emplace_back(move(packagedTask), start, end, x);
+    }
+    auto result = data.cend();
+    for (future<Iterator>& f : futures)
+    {
+        auto it = f.get();
+        if (it != data.cend())
+        {
+            result = it;
+        }
+    }
+    for (thread& t : threads)
+    {
+        t.join();
+    }
+    return result;
 }
 
 void doSomething(function<void(int)> callback)
@@ -115,14 +156,16 @@ auto square(const T x)
 
 int main()
 {
-    constexpr size_t bigSize = 100'000'000u;
+    constexpr size_t bigSize = 500'000'000u;
     vector<int> bigData(bigSize, 13);
     bigData.back() = 42;
 
     auto t1 = high_resolution_clock::now();
     //auto it = Find(bigData, 42);
+    //auto it = FindWithExecutionPolicy(bigData, 42);
     //auto it = AsyncFind(bigData, 42);
-    auto it = MTAsyncFind(bigData, 42);
+    //auto it = MTAsyncFind(bigData, 42);
+    auto it = MTAsyncFindWithPackagedTask(bigData, 42);
     auto t2 = high_resolution_clock::now();
     cout << "Found this: " << *it <<
         " in ms: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
