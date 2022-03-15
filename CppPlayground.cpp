@@ -13,41 +13,56 @@ using chrono::high_resolution_clock;
 using chrono::duration_cast;
 using chrono::milliseconds;
 
-vector<int>::const_iterator Find(const vector<int>& data, const int x)
+constexpr size_t NumThreads = 16u;
+
+template<typename T>
+typename vector<T>::const_iterator Find(const vector<T>& data, const T& x)
 {
     return find(data.cbegin(), data.cend(), x);
 }
 
-vector<int>::const_iterator AsyncFind(const std::vector<int>& data, const int x)
+template<typename T>
+typename vector<T>::const_iterator AsyncFind(const vector<T>& data, const T& x)
 {
-    future<vector<int>::const_iterator> futureIt = async(
+    using Iterator = typename vector<T>::const_iterator;
+    auto findTask = [&data](
+        Iterator from,
+        Iterator to,
+        const T& x) -> Iterator
+    {
+        auto it = find(from, to, x);
+        return (*it) == x ? it : data.cend();
+    };
+    future<Iterator> futureIt = async(
         launch::async,
-        [&data, x]()
-        {
-            return find(data.cbegin(), data.cend(), x);
-        });
+        findTask,
+        data.cbegin(),
+        data.cend(),
+        x);
 
     return futureIt.get();
 }
 
-vector<int>::const_iterator MTAsyncFind(const std::vector<int>& data, const int x)
+template<typename T>
+typename vector<T>::const_iterator MTAsyncFind(const vector<T>& data, const T& x)
 {
-    constexpr size_t NumThreads = 16u;
-    vector<future<vector<int>::const_iterator>> futures;
+    using Iterator = typename vector<T>::const_iterator;
+    auto findTask = [&data](
+        Iterator from,
+        Iterator to,
+        const T& x) -> Iterator
+    {
+        auto it = find(from, to, x);
+        return (*it) == x ? it : data.cend();
+    };
+    const size_t step = data.size() / NumThreads;
+    vector<future<Iterator>> futures;
     for (size_t i = 0; i < NumThreads; i++)
     {
-        futures.push_back(
-            async(
-                launch::async,
-                [&data, x, i, NumThreads]()
-                {
-                    const size_t step = data.size() / NumThreads;
-                    auto start = data.cbegin() + i * step;
-                    const bool isLast = (i == NumThreads - 1);
-                    auto end = isLast ? data.cend() : start + step;
-                    auto it = find(start, end, x);
-                    return (*it) == x ? it : data.cend();
-                }));
+        auto start = data.cbegin() + i * step;
+        const bool isLast = (i == NumThreads - 1);
+        auto end = isLast ? data.cend() : start + step;
+        futures.push_back(async(launch::async, findTask, start, end, x));
     }
     auto result = data.cend();
     for (auto& f : futures)
@@ -61,7 +76,14 @@ vector<int>::const_iterator MTAsyncFind(const std::vector<int>& data, const int 
     return result;
 }
 
-void doSomething(std::function<void(int)> callback)
+template<typename T>
+typename vector<T>::const_iterator MTAsyncFindWithPackagedTask(const vector<T>& data, const T& x)
+{
+    // to try...
+    return data.cend();
+}
+
+void doSomething(function<void(int)> callback)
 {
     this_thread::sleep_for(seconds(1));
     callback(42);
@@ -79,11 +101,11 @@ auto square(const T x)
     return x * x;
 }
 
-/*std::string operator+(const string first, const string second)
+/*string operator+(const string first, const string second)
 {
     if (!(first.size() == second.size()))
         return string();
-    std::string result(first.size(), 0);
+    string result(first.size(), 0);
     for (int i = 0; i < first.size(); i++)
     {
         result[i] = (static_cast<int>(first[i]) + static_cast<int>(second[i])) % 255;
@@ -93,8 +115,8 @@ auto square(const T x)
 
 int main()
 {
-    constexpr size_t bigSize = 500'000'000u;
-    std::vector<int> bigData(bigSize, 13);
+    constexpr size_t bigSize = 100'000'000u;
+    vector<int> bigData(bigSize, 13);
     bigData.back() = 42;
 
     auto t1 = high_resolution_clock::now();
@@ -104,8 +126,6 @@ int main()
     auto t2 = high_resolution_clock::now();
     cout << "Found this: " << *it <<
         " in ms: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
-
-    //cout << boolalpha << "Found: " << (it != bigData.cend()) << endl;
 
     //int foo = 0;
     //doSomething(
