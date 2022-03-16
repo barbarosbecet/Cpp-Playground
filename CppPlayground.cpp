@@ -8,6 +8,7 @@
 #include <exception>
 #include <thread>
 #include <execution>
+#include <coroutine>
 
 using namespace std;
 using chrono::seconds;
@@ -101,7 +102,7 @@ typename vector<T>::const_iterator MTAsyncFindWithPackagedTask(const vector<T>& 
     vector<thread> threads;
     for (size_t i = 0; i < NumThreads; i++)
     {
-        packaged_task<Iterator(Iterator, Iterator, const T&) > packagedTask(findTask);
+        packaged_task<Iterator(Iterator, Iterator, const T&)> packagedTask(findTask);
         auto start = data.cbegin() + i * step;
         const bool isLast = (i == NumThreads - 1);
         auto end = isLast ? data.cend() : start + step;
@@ -154,6 +155,12 @@ auto square(const T x)
     return result;
 }*/
 
+void doThat()
+{
+    this_thread::sleep_for(seconds(1));
+    cout << "That's done!" << endl;
+}
+
 int main()
 {
     constexpr size_t bigSize = 500'000'000u;
@@ -170,16 +177,4 @@ int main()
     cout << "Found this: " << *it <<
         " in ms: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
-    //int foo = 0;
-    //doSomething(
-    //    [&foo](const int result)
-    //    {
-    //        foo = result;
-    //        cout << "something is done" << endl; 
-    //    });
-    //cout << "foo: " << foo << endl;
-
-    //cout << sum(21.5f, 42) << endl;
-
-    //cout << string("Hello") + string("World") << endl;
 }
