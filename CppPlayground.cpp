@@ -143,18 +143,6 @@ auto square(const T x)
     return x * x;
 }
 
-/*string operator+(const string first, const string second)
-{
-    if (!(first.size() == second.size()))
-        return string();
-    string result(first.size(), 0);
-    for (int i = 0; i < first.size(); i++)
-    {
-        result[i] = (static_cast<int>(first[i]) + static_cast<int>(second[i])) % 255;
-    }
-    return result;
-}*/
-
 void doThat()
 {
     this_thread::sleep_for(seconds(1));
@@ -163,7 +151,7 @@ void doThat()
 
 int main()
 {
-    constexpr size_t bigSize = 500'000'000u;
+    constexpr size_t bigSize = 100'000'000u;
     vector<int> bigData(bigSize, 13);
     bigData.back() = 42;
 
@@ -176,5 +164,4 @@ int main()
     auto t2 = high_resolution_clock::now();
     cout << "Found this: " << *it <<
         " in ms: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
-
 }
